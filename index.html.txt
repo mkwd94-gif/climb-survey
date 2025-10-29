@@ -1,0 +1,51 @@
+<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Climbing Pants Survey</title>
+<style>body{font-family:system-ui;margin:24px} .row{display:flex;gap:16px} .card{border:1px solid #ddd;padding:12px;border-radius:8px}</style>
+</head><body>
+<h1>Climbing Pants Survey</h1>
+<div id="status">Status: starting…</div>
+<div id="gate">
+  <button onclick="start('men')">Men</button>
+  <button onclick="start('women')">Women</button>
+</div>
+<div id="app" style="display:none">
+  <div class="row" id="grid"></div>
+</div>
+<script>
+let gender, current, t0, sid = (localStorage.sid ||= (crypto.randomUUID?.() || (Date.now()+'')));
+const S = (m)=>document.getElementById('status').textContent = 'Status: ' + m;
+
+function start(g){ gender=g; document.getElementById('gate').style.display='none'; document.getElementById('app').style.display='block'; S('fetching pair…'); loadPair(); }
+
+async function loadPair(){
+  try{
+    const r = await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gender,session_id:sid})});
+    if(!r.ok){ S('pair HTTP '+r.status); return; }
+    const j = await r.json();
+    if(j.none){ S('no items for '+gender); return; }
+    if(!j.left || !j.right){ S('bad payload'); return; }
+    current=j; t0=performance.now(); render(j); S('ok');
+  }catch(e){ S('js error: '+e); }
+}
+
+async function vote(winner){
+  try{
+    await fetch('/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ a_id: current.left.id, b_id: current.right.id, winner_id: winner, session_id: sid, ms_to_click: Math.round(performance.now()-t0), position_left: current.left.id, gender })
+    });
+    loadPair();
+  }catch(e){ S('vote error: '+e); }
+}
+
+function render({left,right}){
+  const g=document.getElementById('grid'); g.innerHTML='';
+  [left,right].forEach(item=>{
+    const d=document.createElement('div'); d.className='card';
+    d.innerHTML = `<div>${item.brand??''} ${item.name??''}</div><img src="${item.image_url}" alt="${item.name}" style="max-width:320px;display:block;margin:8px 0"><button>I’d buy this</button>`;
+    d.querySelector('button').onclick=()=>vote(item.id);
+    g.appendChild(d);
+  });
+}
+</script>
+</body></html>
